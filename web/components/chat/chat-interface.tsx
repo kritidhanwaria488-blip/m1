@@ -234,7 +234,8 @@ export function ChatInterface() {
       
       <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
-      <div className="w-80 flex-shrink-0 hidden md:block">
+      {/* Sidebar - Clean white */}
+      <div className="w-72 flex-shrink-0 hidden md:block bg-white border-r border-border">
         <ThreadSidebar
           threads={threads}
           activeThreadId={activeThread?.threadId || null}
@@ -247,35 +248,35 @@ export function ChatInterface() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="h-16 border-b border-border flex items-center justify-between px-4 sm:px-6 bg-background-secondary/50 backdrop-blur-sm">
+        {/* Header - Clean flat */}
+        <header className="h-16 bg-white border-b border-border flex items-center justify-between px-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-glow">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
             <div>
-            <h1 className="text-lg font-semibold text-foreground">MF FAQ Assistant</h1>
-            <p className="text-xs text-foreground-muted">
-              {userName ? `Welcome, ${userName}` : 'Facts-only. No investment advice.'}
-            </p>
-          </div>
+              <h1 className="text-base font-semibold text-foreground">MF FAQ Assistant</h1>
+              <p className="text-xs text-foreground-secondary">
+                {userName ? `Welcome, ${userName}` : 'Facts only. No investment advice.'}
+              </p>
+            </div>
           </div>
 
           {/* Mobile menu button */}
           <button className="md:hidden p-2 rounded-lg hover:bg-background-tertiary">
-            <svg className="w-6 h-6 text-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 text-foreground-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
         </header>
 
-        {/* Error Banner */}
+        {/* Error Banner - Clean */}
         {error && (
-          <div className="bg-error/10 border-b border-error/20 px-4 py-2 text-sm text-error flex items-center justify-between">
+          <div className="bg-error/5 border-b border-error/10 px-6 py-2.5 text-sm text-error flex items-center justify-between">
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-error hover:text-error/80">
+            <button onClick={() => setError(null)} className="text-error hover:text-error/70 transition-colors">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -283,117 +284,118 @@ export function ChatInterface() {
           </div>
         )}
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          {!activeThread ? (
-            // Welcome State
-            <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-glow-lg mb-6">
-                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-foreground mb-2 gradient-text">Welcome to MF FAQ Assistant</h2>
-              <p className="text-foreground-secondary mb-8">
-                Ask factual questions about mutual fund schemes. I provide information from official sources only.
-              </p>
+        {/* Messages - Centered with max-width */}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+          <div className="max-w-3xl mx-auto">
+            {!activeThread ? (
+              // Welcome State
+              <div className="h-full flex flex-col items-center justify-center text-center py-12">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
+                  <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-semibold text-foreground mb-3">Welcome to MF FAQ Assistant</h2>
+                <p className="text-foreground-secondary mb-8 max-w-md leading-relaxed">
+                  Ask factual questions about mutual fund schemes. I provide information from official sources only.
+                </p>
 
-              <div className="w-full">
-                <p className="text-sm text-foreground-muted mb-3">Try asking:</p>
-                <div className="space-y-2">
+                <div className="w-full max-w-md space-y-3 mb-8">
                   {EXAMPLE_QUESTIONS.map((q, i) => (
                     <button
                       key={i}
                       onClick={() => handleExampleQuestion(q)}
                       disabled={isLoading}
-                      className="w-full p-3 text-left bg-background-secondary hover:bg-background-tertiary rounded-lg border border-border hover:border-primary/50 transition-all text-sm text-foreground-secondary hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full p-4 text-left bg-white rounded-xl border border-border hover:border-primary/30 hover:shadow-card-hover transition-all duration-200 text-sm text-foreground-secondary hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => handleExampleQuestion(EXAMPLE_QUESTIONS[0])}
+                  disabled={isLoading}
+                  className="px-8 py-3 bg-primary hover:bg-primary-600 text-white rounded-full font-medium transition-all duration-200 shadow-subtle hover:shadow-card disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? 'Creating thread...' : 'Start New Conversation'}
+                </button>
+              </div>
+            ) : activeThread.messages.length === 0 ? (
+              // Empty Thread
+              <div className="h-full flex flex-col items-center justify-center text-center py-12">
+                <p className="text-foreground-secondary mb-6">Start the conversation by sending a message</p>
+                <div className="w-full max-w-md space-y-3">
+                  {EXAMPLE_QUESTIONS.map((q, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleExampleQuestion(q)}
+                      disabled={isLoading}
+                      className="w-full p-4 text-left bg-white rounded-xl border border-border hover:border-primary/30 hover:shadow-card-hover transition-all duration-200 text-sm text-foreground-secondary hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {q}
                     </button>
                   ))}
                 </div>
               </div>
-
-              <button
-                onClick={() => handleExampleQuestion(EXAMPLE_QUESTIONS[0])}
-                disabled={isLoading}
-                className="mt-8 px-6 py-3 bg-primary hover:bg-primary-600 text-white rounded-lg font-medium transition-all shadow-glow hover:shadow-glow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? 'Creating thread...' : 'Start New Conversation'}
-              </button>
-            </div>
-          ) : activeThread.messages.length === 0 ? (
-            // Empty Thread
-            <div className="h-full flex flex-col items-center justify-center text-center">
-              <p className="text-foreground-muted mb-4">Start the conversation by sending a message</p>
-              <div className="space-y-2 w-full max-w-md">
-                {EXAMPLE_QUESTIONS.map((q, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleExampleQuestion(q)}
-                    disabled={isLoading}
-                    className="w-full p-3 text-left bg-background-secondary hover:bg-background-tertiary rounded-lg border border-border hover:border-primary/50 transition-all text-sm text-foreground-secondary hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {q}
-                  </button>
+            ) : (
+              // Message List
+              <div className="space-y-6">
+                {activeThread.messages.map((message, index) => (
+                  <MessageBubble
+                    key={index}
+                    message={message}
+                    showTimestamp={true}
+                  />
                 ))}
+                {isTyping && <TypingIndicator />}
+                <div ref={messagesEndRef} />
               </div>
-            </div>
-          ) : (
-            // Message List
-            <>
-              {activeThread.messages.map((message, index) => (
-                <MessageBubble
-                  key={index}
-                  message={message}
-                  showTimestamp={true}
-                />
-              ))}
-              {isTyping && <TypingIndicator />}
-              <div ref={messagesEndRef} />
-            </>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Input Area */}
-        <div className="border-t border-border p-4 bg-background-secondary/50">
-          <div className="max-w-4xl mx-auto flex gap-3">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={activeThread ? "Ask about mutual funds..." : "Start a new conversation first"}
-              disabled={!activeThread || isLoading}
-              rows={1}
-              className={cn(
-                'flex-1 resize-none rounded-xl px-4 py-3 bg-background-tertiary border border-border',
-                'text-foreground placeholder:text-foreground-muted',
-                'focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary',
-                'transition-all duration-200',
-                (!activeThread || isLoading) && 'opacity-50 cursor-not-allowed'
-              )}
-              style={{ minHeight: '48px', maxHeight: '120px' }}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim() || !activeThread || isLoading}
-              className={cn(
-                'px-4 py-3 rounded-xl bg-primary hover:bg-primary-600 text-white',
-                'transition-all duration-200 shadow-glow hover:shadow-glow-lg',
-                'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
-                'active:scale-[0.98]',
-                (!input.trim() || !activeThread || isLoading) && 'opacity-50 cursor-not-allowed'
-              )}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
+        {/* Input Area - Pill shape, clean */}
+        <div className="bg-white border-t border-border px-4 sm:px-6 py-4">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex gap-3 items-end">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={activeThread ? "Ask about mutual funds..." : "Start a new conversation first"}
+                disabled={!activeThread || isLoading}
+                rows={1}
+                className={cn(
+                  'flex-1 resize-none rounded-full px-5 py-3 bg-background-tertiary border-0',
+                  'text-foreground placeholder:text-foreground-muted text-sm',
+                  'focus:outline-none focus:ring-2 focus:ring-primary/20',
+                  'transition-all duration-200',
+                  (!activeThread || isLoading) && 'opacity-50 cursor-not-allowed'
+                )}
+                style={{ minHeight: '44px', maxHeight: '120px' }}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!input.trim() || !activeThread || isLoading}
+                className={cn(
+                  'w-11 h-11 rounded-full bg-primary hover:bg-primary-600 text-white flex items-center justify-center',
+                  'transition-all duration-200 shadow-subtle hover:shadow-card',
+                  'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+                  'active:scale-95',
+                  (!input.trim() || !activeThread || isLoading) && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-center text-xs text-foreground-muted mt-3">
+              Facts only. No investment advice.
+            </p>
           </div>
-          <p className="text-center text-xs text-foreground-muted mt-2">
-            Facts-only. No investment advice. Responses include source links and last updated date.
-          </p>
         </div>
       </div>
     </div>

@@ -22,23 +22,23 @@ export function MessageBubble({ message, showTimestamp = true }: MessageBubblePr
   return (
     <div
       className={cn(
-        'flex w-full mb-4',
+        'flex w-full',
         isUser ? 'justify-end' : 'justify-start'
       )}
     >
       <div
         className={cn(
-          'max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3',
-          'animate-fade-in',
+          'max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3.5',
+          'animate-fade-in shadow-subtle',
           isUser
-            ? 'bg-primary text-white rounded-br-md'
-            : 'bg-background-secondary border border-border rounded-bl-md'
+            ? 'bg-primary text-white rounded-br-lg'
+            : 'bg-white border border-border rounded-bl-lg'
         )}
       >
         {/* Message content */}
         <div
           className={cn(
-            'text-sm sm:text-base leading-relaxed',
+            'text-sm leading-relaxed',
             isUser ? 'text-white' : 'text-foreground'
           )}
           dangerouslySetInnerHTML={{ __html: contentWithLinks }}
@@ -46,8 +46,8 @@ export function MessageBubble({ message, showTimestamp = true }: MessageBubblePr
 
         {/* Error indicator */}
         {message.isError && (
-          <div className="mt-2 flex items-center gap-1.5 text-error text-xs">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="mt-2 flex items-center gap-1.5 text-error/80 text-xs">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             Error occurred
@@ -57,7 +57,7 @@ export function MessageBubble({ message, showTimestamp = true }: MessageBubblePr
         {/* Refusal indicator */}
         {message.isRefusal && (
           <div className="mt-2 flex items-center gap-1.5 text-warning text-xs">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             Advisory query refused
@@ -68,8 +68,8 @@ export function MessageBubble({ message, showTimestamp = true }: MessageBubblePr
         {showTimestamp && (
           <div
             className={cn(
-              'mt-1.5 text-xs',
-              isUser ? 'text-indigo-200' : 'text-foreground-muted'
+              'mt-2 text-xs',
+              isUser ? 'text-white/70' : 'text-foreground-muted'
             )}
           >
             {formatDate(message.timestamp)}
@@ -88,7 +88,7 @@ export function MessageBubble({ message, showTimestamp = true }: MessageBubblePr
 
         {/* Debug info */}
         {showDebug && message.retrievalDebugId && (
-          <pre className="mt-2 p-2 bg-background rounded text-xs text-foreground-secondary overflow-x-auto">
+          <pre className="mt-2 p-2 bg-background-tertiary rounded-lg text-xs text-foreground-secondary overflow-x-auto">
             {message.retrievalDebugId}
           </pre>
         )}
