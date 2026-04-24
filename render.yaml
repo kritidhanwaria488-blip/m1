@@ -1,11 +1,13 @@
 # Render Deployment Configuration
 # https://render.com/docs/infrastructure-as-code
+# This deploys both the API server and the daily ingestion scheduler
 
 services:
+  # Web Service: FastAPI Backend
   - type: web
     name: mf-faq-assistant
     runtime: python
-    plan: free  # Change to 'starter' for production
+    plan: free  # Change to 'starter' ($7/mo) for production
     region: singapore  # Closest to India
     branch: main
     buildCommand: pip install -r requirements.txt
@@ -30,3 +32,28 @@ services:
       mountPath: /opt/render/project/src/data
       sizeGB: 1
     healthCheckPath: /health
+
+  # Cron Job: Daily Ingestion Scheduler
+  # Runs at 09:15 AM IST (03:45 UTC) every day
+  - type: cron
+    name: mf-faq-scheduler
+    runtime: python
+    plan: starter  # Cron jobs require paid plan on Render
+    region: singapore
+    schedule: "45 3 * * *"  # 03:45 UTC = 09:15 IST (India)
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/local_scheduler.py --run-id $(date -u +%Y%m%d-%H%M%S)
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false  # Set manually in dashboard
+      - key: THREAD_DB_PATH
+        value: /opt/render/project/src/data/threads.db
+      - key: CHROMA_PERSIST_DIR
+        value: /opt/render/project/src/data/chroma
+      - key: ADMIN_REINDEX_SECRET
+        sync: false  # Same as web service
+    disk:
+      name: mf-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1  # Shared disk with web service

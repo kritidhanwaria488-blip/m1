@@ -11,27 +11,34 @@ Complete deployment strategy for the Mutual Fund FAQ Assistant with automated sc
 │                         DEPLOYMENT ARCHITECTURE                      │
 └─────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   GitHub        │     │    Render       │     │    Vercel       │
-│   Actions       │────▶│   (Backend)     │◀────│   (Frontend)    │
-│  (Scheduler)    │     │  FastAPI + DB   │     │   Next.js       │
-└─────────────────┘     └────────┬────────┘     └─────────────────┘
-         │                         │
-         │    Daily Ingestion      │   API Queries
-         │    (09:15 AM IST)       │   (Real-time)
-         │                         │
-         ▼                         ▼
-┌──────────────────────────────────────────────┐
-│              Local ChromaDB                    │
-│         (PersistentClient)                   │
-│              data/chroma/                      │
-└──────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────┐
-│              SQLite Database                   │
-│         (Thread Storage)                       │
-│           data/threads.db                      │
-└──────────────────────────────────────────────┘
+                             ┌─────────────────┐
+                             │    Vercel       │
+                             │   (Frontend)    │
+                             │   Next.js       │
+                             └────────┬────────┘
+                                      │ API Queries
+                                      │ (Real-time)
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                            RENDER                                   │
+│  ┌─────────────────────┐         ┌─────────────────────────────────┐  │
+│  │   Web Service       │         │   Cron Job (Scheduler)          │  │
+│  │   FastAPI Server    │◀───────▶│   Daily Ingestion               │  │
+│  │   - API endpoints   │ Shared  │   - Runs 09:15 AM IST           │  │
+│  │   - Thread queries  │  Disk   │   - Updates ChromaDB            │  │
+│  │   - Safety checks   │         │   - Logs to same disk           │  │
+│  └─────────────────────┘         └─────────────────────────────────┘  │
+│           │                                    │                      │
+│           └────────────┬───────────────────────┘                      │
+│                        │                                              │
+│                        ▼                                              │
+│  ┌─────────────────────────────────────────────────────────────────┐  │
+│  │   Shared Persistent Disk                                        │  │
+│  │   ├── data/chroma/      (ChromaDB - 251 chunks indexed)       │  │
+│  │   ├── data/threads.db   (SQLite - conversation storage)         │  │
+│  │   └── logs/             (Scheduler logs)                       │  │
+│  └─────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────┐
 │              Zapier (Optional)                 │
@@ -44,80 +51,175 @@ Complete deployment strategy for the Mutual Fund FAQ Assistant with automated sc
 
 ---
 
-## 1. GitHub Actions (Scheduler)
+## 1. Render Cron Job (Scheduler)
 
-**Purpose**: Daily automated ingestion pipeline
-**Schedule**: 09:15 AM IST (03:45 UTC) daily
-**Product**: GitHub Actions (Free tier: 2,000 minutes/month)
+**Purpose**: Daily automated ingestion pipeline  
+**Schedule**: 09:15 AM IST (03:45 UTC) daily  
+**Product**: Render Cron Job (Requires Starter plan: $7/month)
+
+### Why Render for Scheduler?
+
+**The Problem with GitHub Actions:**
+- ❌ ChromaDB created in GitHub runner isn't accessible by backend
+- ❌ Artifacts are temporary and hard to sync
+- ❌ Data transfer complexity
+
+**The Render Solution:**
+- ✅ Scheduler runs on SAME server as backend
+- ✅ Shared persistent disk (ChromaDB immediately available)
+- ✅ No data transfer needed
+- ✅ Logs accessible in one place
 
 ### Configuration
 
-Already configured in `.github/workflows/ingest.yml`:
+Configured in `render.yaml`:
 
 ```yaml
-name: Daily Ingestion Pipeline
-on:
-  schedule:
-    - cron: '45 3 * * *'  # 03:45 UTC = 09:15 IST
-  workflow_dispatch:       # Manual trigger
+services:
+  # Web Service (API)
+  - type: web
+    name: mf-faq-assistant
+    # ... API configuration ...
+    disk:
+      name: mf-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+  
+  # Cron Job (Scheduler)
+  - type: cron
+    name: mf-faq-scheduler
+    schedule: "45 3 * * *"  # 09:15 AM IST
+    startCommand: python scripts/local_scheduler.py
+    disk:
+      name: mf-data  # SAME disk as web service!
+      mountPath: /opt/render/project/src/data
 ```
 
-### Required Secrets
+### How It Works
 
-Add these to GitHub repository (Settings → Secrets → Actions):
+```
+09:15 AM IST
+    │
+    ▼
+┌─────────────────────────────────────┐
+│  Render Cron Job Starts             │
+│  mf-faq-scheduler                   │
+└─────────────┬───────────────────────┘
+              │
+              ▼
+    ┌─────────────────────┐
+    │  Phase 4.0: Scrape │──► data/raw/
+    └─────────────────────┘
+              │
+              ▼
+    ┌─────────────────────┐
+    │  Phase 4.1: Normalize│──► data/structured/
+    └─────────────────────┘
+              │
+              ▼
+    ┌─────────────────────┐
+    │  Phase 4.2: Chunk   │──► data/structured/*/chunked/
+    └─────────────────────┘
+              │
+              ▼
+    ┌─────────────────────┐
+    │  Phase 4.3: Index  │──► data/chroma/ (ChromaDB)
+    └─────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────┐
+│  Web Service (FastAPI)              │
+│  Immediately sees updated ChromaDB  │
+│  Same disk, no sync needed!         │
+└─────────────────────────────────────┘
+```
 
-| Secret | Value | Purpose |
-|--------|-------|---------|
-| `GROQ_API_KEY` | `gsk_...` | LLM generation (optional for ingestion) |
-| `ADMIN_REINDEX_SECRET` | random string | Admin endpoint protection |
-| `THREAD_DB_PATH` | `data/threads.db` | SQLite storage path |
+### Logs
 
-**Note**: No Chroma Cloud secrets needed (using Local ChromaDB now!)
+Scheduler logs saved to:
+```
+/opt/render/project/src/data/logs/scheduler_YYYYMMDD-HHMMSS.log
+```
 
-### Artifacts
-
-GitHub Actions uploads these after each run:
-- `manifest.json` (raw)
-- `manifest.json` (structured)
-- `manifest.json` (chunked)
-
-Retention: 7 days
+View in Render Dashboard:
+1. Go to Cron Job → Logs
+2. Or SSH into disk: `cd data/logs/`
 
 ---
 
-## 2. Render (Backend API)
+## 2. Render (Backend + Scheduler)
 
-**Purpose**: Host FastAPI application
-**Product**: Render Web Service (Free tier available)
+**Purpose**: Host FastAPI application AND run daily ingestion
+**Product**: Render Web Service + Cron Job
 **URL**: `https://mf-faq-assistant.onrender.com`
 
 ### Why Render?
 - ✅ Native Python support
-- ✅ Free tier with 512 MB RAM
+- ✅ Cron jobs for scheduling (paid plan)
+- ✅ Persistent disks shared between services
+- ✅ Same server = no data sync issues
 - ✅ Automatic deployments from Git
-- ✅ Persistent disks (for SQLite/ChromaDB)
-- ✅ Custom domains
+
+### Architecture: Shared Disk Pattern
+
+```
+┌─────────────────────────────────────────┐
+│           RENDER DASHBOARD              │
+│                                         │
+│  ┌──────────────┐    ┌──────────────┐   │
+│  │  Web Service │    │  Cron Job    │   │
+│  │  (FastAPI)   │    │  (Scheduler) │   │
+│  │  ─────────── │    │  ─────────── │   │
+│  │  Queries API  │    │  09:15 AM IST│   │
+│  │  Real-time   │    │  Ingestion   │   │
+│  └──────┬───────┘    └──────┬───────┘   │
+│         │                     │           │
+│         └──────────┬──────────┘           │
+│                    │                      │
+│         ┌──────────▼──────────┐          │
+│         │   SHARED DISK       │          │
+│         │   mf-data (1GB)      │          │
+│         │   ─────────────     │          │
+│         │   data/chroma/       │          │
+│         │   data/threads.db    │          │
+│         │   data/logs/         │          │
+│         └─────────────────────┘          │
+└─────────────────────────────────────────┘
+```
 
 ### Deployment Steps
 
 #### 2.1 Create Render Account
 1. Sign up at https://render.com (GitHub login)
-2. Create new Web Service
+2. Click "New +" → "Blueprint"
 3. Connect GitHub repository
 
-#### 2.2 Configure Service
+#### 2.2 Deploy with render.yaml
 
-**Settings:**
+Your repo already has `render.yaml`:
+
 ```yaml
-Name: mf-faq-assistant
-Region: Singapore (closest to India)
-Branch: main
-Build Command: pip install -r requirements.txt
-Start Command: python -m runtime.phase_9_api
-Plan: Starter ($7/month) or Free
+services:
+  # Web Service
+  - type: web
+    name: mf-faq-assistant
+    plan: free
+    # ... (see file for full config)
+  
+  # Cron Job (Scheduler)
+  - type: cron
+    name: mf-faq-scheduler
+    plan: starter  # $7/month
+    schedule: "45 3 * * *"  # 09:15 AM IST
+    # ... (see file for full config)
+    disk:
+      name: mf-data  # SHARED with web service!
+      mountPath: /opt/render/project/src/data
 ```
 
-**Environment Variables:**
+#### 2.3 Set Environment Variables
+
+Both services share these:
 ```
 GROQ_API_KEY=gsk_your_key_here
 THREAD_DB_PATH=/opt/render/project/src/data/threads.db
@@ -126,23 +228,7 @@ ADMIN_REINDEX_SECRET=your_secure_random_string
 RUNTIME_API_DEBUG=0
 ```
 
-#### 2.3 Persistent Disk (Important!)
-
-For SQLite and ChromaDB to persist across deploys:
-
-```yaml
-# render.yaml (add to repo root)
-services:
-  - type: web
-    name: mf-faq-assistant
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m runtime.phase_9_api
-    disk:
-      name: mf-data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 1
-```
+**Important**: Use the SAME secret for both web service and cron job so admin endpoints work.
 
 ### Health Check Endpoint
 
@@ -325,28 +411,34 @@ Slack → "✅ Daily ingestion complete! 251 chunks indexed."
 
 ## Deployment Checklist
 
-### Phase 1: Backend (Render)
-- [ ] Create Render account
-- [ ] Connect GitHub repo
-- [ ] Configure environment variables
-- [ ] Set up persistent disk
+### Phase 1: Render (Backend + Scheduler)
+- [ ] Create Render account (https://render.com)
+- [ ] Click "New +" → "Blueprint"
+- [ ] Connect GitHub repo (`kritidhanwaria488-blip/m1`)
+- [ ] Upgrade to Starter plan ($7/month) for cron jobs
+- [ ] Configure environment variables (both web service and cron job):
+  - `GROQ_API_KEY`
+  - `ADMIN_REINDEX_SECRET` (same for both!)
+  - `THREAD_DB_PATH=/opt/render/project/src/data/threads.db`
+  - `CHROMA_PERSIST_DIR=/opt/render/project/src/data/chroma`
 - [ ] Deploy and verify health endpoint
 - [ ] Test API endpoints with curl/Postman
+- [ ] **Trigger first ingestion**: Go to Cron Job → Run Job
+- [ ] Verify ChromaDB populated with 251 chunks
+- [ ] Verify logs in `data/logs/`
 
 ### Phase 2: Frontend (Vercel)
 - [ ] Create Vercel account
 - [ ] Import GitHub repo
-- [ ] Set `NEXT_PUBLIC_API_URL`
+- [ ] Set `NEXT_PUBLIC_API_URL=https://[your-render-service].onrender.com`
 - [ ] Deploy and test UI
 - [ ] Verify chat functionality
 - [ ] Test thread management
 
-### Phase 3: Scheduler (GitHub Actions)
-- [ ] Verify workflow file exists
-- [ ] Add required secrets
-- [ ] Test manual trigger
-- [ ] Wait for first scheduled run
-- [ ] Verify logs and artifacts
+### Phase 3: Zapier Automations (Optional)
+- [ ] Create Zapier account
+- [ ] Set up failure alert (Render → Email/Slack)
+- [ ] Set up daily summary (Schedule → API → Email)
 
 ### Phase 4: Zapier (Optional)
 - [ ] Create Zapier account
@@ -386,23 +478,41 @@ NEXT_PUBLIC_API_URL=https://mf-faq-assistant.onrender.com
 
 ## Cost Estimation
 
-### Free Tier Limits
+### Why Render Cron Job Requires Paid Plan
 
-| Service | Free Tier | Usage |
-|---------|-----------|-------|
-| **GitHub Actions** | 2,000 min/month | ~60 min/month (1 run/day) |
-| **Render** | 512 MB RAM, 0.1 CPU | Sufficient for low traffic |
-| **Vercel** | 100 GB bandwidth | Sufficient for demo |
-| **Zapier** | 100 tasks/month | ~30 tasks/month |
+Cron jobs on Render require at least the **Starter plan** ($7/month):
+- Free tier: Web services only
+- Starter ($7/mo): Web + Cron jobs + 1GB disk
 
-### Paid Tier (If Needed)
+### Cost Breakdown
 
-| Service | Plan | Cost | When Needed |
-|---------|------|------|-------------|
-| Render | Starter | $7/month | Higher traffic |
-| Zapier | Starter | $19.99/month | More automations |
+| Service | Plan | Cost | Purpose |
+|---------|------|------|---------|
+| **Render Web** | Free | $0 | FastAPI backend (512 MB RAM) |
+| **Render Cron** | Starter | $7/mo | Daily ingestion scheduler |
+| **Render Disk** | Included | $0 | 1GB shared persistent disk |
+| **Vercel** | Hobby | $0 | Next.js frontend |
+| **Zapier** | Free | $0 | 100 tasks/month (alerts) |
 
-**Total Estimated Cost: $0-27/month**
+**Total Estimated Cost: $7/month** (Render Starter plan)
+
+### Can I Reduce Cost?
+
+**Option: Run Scheduler Manually**
+- Disable Render cron job
+- Run local scheduler manually when needed:
+  ```bash
+  python scripts/local_scheduler.py
+  ```
+- Cost: **$0/month** (but no automatic daily updates)
+
+**Option: Use GitHub Actions + Manual Deploy**
+- Keep GitHub Actions for ingestion
+- Commit ChromaDB to repo (not recommended for production)
+- Auto-deploy on Render when repo updates
+- Cost: **$0/month** but messy git history
+
+**Recommendation**: Pay $7/month for the clean, reliable architecture.
 
 ---
 
