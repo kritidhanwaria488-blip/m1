@@ -47,6 +47,17 @@ export function ChatInterface() {
     }
   }, [activeThread, isLoading, showWelcome]);
 
+  // Debug: Log activeThread changes
+  useEffect(() => {
+    if (activeThread) {
+      console.log('Active thread updated:', {
+        threadId: activeThread.threadId,
+        messageCount: activeThread.messages.length,
+        lastMessage: activeThread.messages[activeThread.messages.length - 1]?.content.substring(0, 30)
+      });
+    }
+  }, [activeThread?.messages]);
+
   async function loadThreads() {
     try {
       const threadList = await api.listThreads(20);
@@ -137,10 +148,16 @@ export function ChatInterface() {
   }
 
   async function sendMessage() {
-    if (!input.trim() || !activeThread || isLoading) return;
+    if (!input.trim() || !activeThread || isLoading) {
+      console.log('sendMessage blocked:', { hasInput: !!input.trim(), hasThread: !!activeThread, isLoading });
+      return;
+    }
 
     const userMessage = input.trim();
     const currentThreadId = activeThread.threadId;
+    const currentMessages = activeThread.messages;
+    
+    console.log('Sending message:', { threadId: currentThreadId, messageCount: currentMessages.length });
     
     // Clear input immediately for better UX
     setInput('');
@@ -155,18 +172,26 @@ export function ChatInterface() {
       timestamp: new Date().toISOString(),
     };
 
+    // Use functional update to ensure we have latest state
     setActiveThread(prev => {
-      if (!prev || prev.threadId !== currentThreadId) return prev;
-      return {
+      if (!prev || prev.threadId !== currentThreadId) {
+        console.log('Thread mismatch, skipping user message update');
+        return prev;
+      }
+      const updated = {
         ...prev,
         messages: [...prev.messages, newUserMessage],
         updatedAt: new Date().toISOString(),
       };
+      console.log('Updated thread with user message:', updated.messages.length);
+      return updated;
     });
 
     try {
+      console.log('Calling API...');
       // Send message to API
       const response = await api.sendMessage(currentThreadId, userMessage);
+      console.log('API response received:', response.assistantMessage.substring(0, 50));
 
       // Add assistant response to UI
       const assistantMessage: Message = {
@@ -179,19 +204,27 @@ export function ChatInterface() {
       };
 
       setActiveThread(prev => {
-        if (!prev || prev.threadId !== currentThreadId) return prev;
-        return {
+        if (!prev || prev.threadId !== currentThreadId) {
+          console.log('Thread mismatch, skipping assistant message update');
+          return prev;
+        }
+        const updated = {
           ...prev,
           messages: [...prev.messages, assistantMessage],
           updatedAt: new Date().toISOString(),
         };
+        console.log('Updated thread with assistant message:', updated.messages.length);
+        return updated;
       });
 
       // Refresh thread list in background (don't block)
       loadThreads().catch(() => {});
       
       // Refocus input for next message
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setTimeout(() => {
+        console.log('Refocusing input');
+        inputRef.current?.focus();
+      }, 100);
       
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -215,6 +248,7 @@ export function ChatInterface() {
 
       setError('Failed to send message. Please try again.');
     } finally {
+      console.log('Setting isLoading=false, isTyping=false');
       setIsLoading(false);
       setIsTyping(false);
     }
@@ -343,7 +377,7 @@ export function ChatInterface() {
               <div className="space-y-6">
                 {activeThread.messages.map((message, index) => (
                   <MessageBubble
-                    key={index}
+                    key={`${activeThread.threadId}-${index}-${message.timestamp}`}
                     message={message}
                     showTimestamp={true}
                   />
