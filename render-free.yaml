@@ -15,9 +15,9 @@ services:
       - key: GROQ_API_KEY
         sync: false  # Set manually in dashboard
       - key: THREAD_DB_PATH
-        value: /opt/render/project/src/data/threads.db
+        value: ./data/threads.db  # Use ephemeral storage (resets on restart)
       - key: CHROMA_PERSIST_DIR
-        value: /opt/render/project/src/data/chroma
+        value: ./data/chroma  # ChromaDB from repo (GitHub Actions commits it)
       - key: ADMIN_REINDEX_SECRET
         generateValue: true
       - key: RUNTIME_API_DEBUG
@@ -26,10 +26,8 @@ services:
         value: "8000"
       - key: API_HOST
         value: "0.0.0.0"
-    disk:
-      name: mf-data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 0.5  # Smallest free disk
+    # NO DISK - Free tier doesn't support it
+    # ChromaDB comes from GitHub repo (committed by GitHub Actions)
     healthCheckPath: /health
 
 # NOTE: No cron job here - use GitHub Actions for scheduling instead
