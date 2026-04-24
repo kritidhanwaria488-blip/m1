@@ -189,7 +189,7 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Update ChromaDB data - Run ${{ steps.run_id.outputs.run_id }}"
-            git push origin main
+            git push origin master
             echo "ChromaDB data committed to repository"
           fi
         env:

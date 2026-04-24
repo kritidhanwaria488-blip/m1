@@ -8,7 +8,7 @@ services:
     runtime: python
     plan: free  # FREE TIER - Auto-sleeps after 15min idle
     region: singapore
-    branch: main
+    branch: master  # Your repo uses master, not main
     buildCommand: pip install -r requirements.txt
     startCommand: python -m runtime.phase_9_api
     envVars:
