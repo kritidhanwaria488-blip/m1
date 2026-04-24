@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Thread, ThreadSummary, Message } from '@/types';
 import { ThreadSidebar } from './thread-sidebar';
 import { MessageBubble } from './message-bubble';
 import { TypingIndicator } from './typing-indicator';
+import { WelcomeModal } from './welcome-modal';
 import { cn } from '@/lib/utils';
 import * as api from '@/lib/api';
 
@@ -21,12 +22,17 @@ export function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [userName, setUserName] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hasStartedRef = useRef(false);
 
-  // Load threads on mount
+  // Load threads on mount - only once
   useEffect(() => {
-    loadThreads();
+    if (!hasStartedRef.current) {
+      loadThreads();
+    }
   }, []);
 
   // Scroll to bottom on new messages
@@ -34,12 +40,19 @@ export function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeThread?.messages, isTyping]);
 
+  // Focus input when thread is active and not loading
+  useEffect(() => {
+    if (activeThread && !isLoading && !showWelcome) {
+      inputRef.current?.focus();
+    }
+  }, [activeThread, isLoading, showWelcome]);
+
   async function loadThreads() {
     try {
       const threadList = await api.listThreads(20);
       setThreads(threadList);
-      // Auto-select first thread if none active
-      if (!activeThread && threadList.length > 0) {
+      // Auto-select first thread if none active (only on initial load)
+      if (!activeThread && !hasStartedRef.current && threadList.length > 0) {
         await selectThread(threadList[0].threadId);
       }
     } catch (err) {
@@ -47,18 +60,58 @@ export function ChatInterface() {
     }
   }
 
-  async function createNewThread() {
+  async function handleWelcomeStart(name: string) {
+    setUserName(name);
+    setShowWelcome(false);
+    hasStartedRef.current = true;
+    
+    // Create first thread for the user
     try {
       setIsLoading(true);
-      const thread = await api.createThread();
+      const thread = await api.createThread(name);
       setActiveThread(thread);
       await loadThreads();
-      inputRef.current?.focus();
+      // Focus input after thread creation
+      setTimeout(() => inputRef.current?.focus(), 100);
     } catch (err) {
       setError('Failed to create thread');
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function createNewThread() {
+    try {
+      setIsLoading(true);
+      const thread = await api.createThread(userName || undefined);
+      setActiveThread(thread);
+      // Clear input for new thread
+      setInput('');
+      await loadThreads();
+      // Focus input after creation
+      setTimeout(() => inputRef.current?.focus(), 100);
+    } catch (err) {
+      setError('Failed to create thread');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleExampleQuestion(question: string) {
+    if (!activeThread) {
+      // Create new thread first if none exists
+      await createNewThread();
+    }
+    setInput(question);
+    // Focus input and allow user to edit before sending
+    setTimeout(() => {
+      inputRef.current?.focus();
+      // Auto-resize textarea
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto';
+        inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+      }
+    }, 100);
   }
 
   async function selectThread(threadId: string) {
@@ -87,44 +140,63 @@ export function ChatInterface() {
     if (!input.trim() || !activeThread || isLoading) return;
 
     const userMessage = input.trim();
+    const currentThreadId = activeThread.threadId;
+    
+    // Clear input immediately for better UX
     setInput('');
     setIsLoading(true);
     setIsTyping(true);
     setError(null);
 
-    // Optimistically add user message
-    const newMessage: Message = {
+    // Optimistically add user message to UI
+    const newUserMessage: Message = {
       role: 'user',
       content: userMessage,
       timestamp: new Date().toISOString(),
     };
 
-    setActiveThread(prev => prev ? {
-      ...prev,
-      messages: [...prev.messages, newMessage],
-    } : prev);
+    setActiveThread(prev => {
+      if (!prev || prev.threadId !== currentThreadId) return prev;
+      return {
+        ...prev,
+        messages: [...prev.messages, newUserMessage],
+        updatedAt: new Date().toISOString(),
+      };
+    });
 
     try {
-      const response = await api.sendMessage(activeThread.threadId, userMessage);
+      // Send message to API
+      const response = await api.sendMessage(currentThreadId, userMessage);
 
-      // Add assistant response
+      // Add assistant response to UI
       const assistantMessage: Message = {
         role: 'assistant',
         content: response.assistantMessage,
         timestamp: new Date().toISOString(),
         retrievalDebugId: response.debug ? JSON.stringify(response.debug) : undefined,
-        isRefusal: response.assistantMessage.toLowerCase().includes('cannot provide'),
+        isRefusal: response.assistantMessage.toLowerCase().includes('cannot provide') || 
+                   response.assistantMessage.toLowerCase().includes('sorry'),
       };
 
-      setActiveThread(prev => prev ? {
-        ...prev,
-        messages: [...prev.messages, assistantMessage],
-      } : prev);
+      setActiveThread(prev => {
+        if (!prev || prev.threadId !== currentThreadId) return prev;
+        return {
+          ...prev,
+          messages: [...prev.messages, assistantMessage],
+          updatedAt: new Date().toISOString(),
+        };
+      });
 
-      // Refresh thread list to update order
-      await loadThreads();
+      // Refresh thread list in background (don't block)
+      loadThreads().catch(() => {});
+      
+      // Refocus input for next message
+      setTimeout(() => inputRef.current?.focus(), 50);
+      
     } catch (err) {
-      // Add error message
+      console.error('Failed to send message:', err);
+      
+      // Add error message to UI
       const errorMessage: Message = {
         role: 'assistant',
         content: 'Sorry, I encountered an error processing your request. Please try again.',
@@ -132,12 +204,16 @@ export function ChatInterface() {
         isError: true,
       };
 
-      setActiveThread(prev => prev ? {
-        ...prev,
-        messages: [...prev.messages, errorMessage],
-      } : prev);
+      setActiveThread(prev => {
+        if (!prev || prev.threadId !== currentThreadId) return prev;
+        return {
+          ...prev,
+          messages: [...prev.messages, errorMessage],
+          updatedAt: new Date().toISOString(),
+        };
+      });
 
-      setError('Failed to send message');
+      setError('Failed to send message. Please try again.');
     } finally {
       setIsLoading(false);
       setIsTyping(false);
@@ -152,7 +228,11 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <>
+      {/* Welcome Modal */}
+      {showWelcome && <WelcomeModal onStart={handleWelcomeStart} />}
+      
+      <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
       <div className="w-80 flex-shrink-0 hidden md:block">
         <ThreadSidebar
@@ -176,9 +256,11 @@ export function ChatInterface() {
               </svg>
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-foreground">MF FAQ Assistant</h1>
-              <p className="text-xs text-foreground-muted">Facts-only. No investment advice.</p>
-            </div>
+            <h1 className="text-lg font-semibold text-foreground">MF FAQ Assistant</h1>
+            <p className="text-xs text-foreground-muted">
+              {userName ? `Welcome, ${userName}` : 'Facts-only. No investment advice.'}
+            </p>
+          </div>
           </div>
 
           {/* Mobile menu button */}
@@ -222,11 +304,9 @@ export function ChatInterface() {
                   {EXAMPLE_QUESTIONS.map((q, i) => (
                     <button
                       key={i}
-                      onClick={() => {
-                        if (!activeThread) createNewThread();
-                        setInput(q);
-                      }}
-                      className="w-full p-3 text-left bg-background-secondary hover:bg-background-tertiary rounded-lg border border-border hover:border-primary/50 transition-all text-sm text-foreground-secondary hover:text-foreground"
+                      onClick={() => handleExampleQuestion(q)}
+                      disabled={isLoading}
+                      className="w-full p-3 text-left bg-background-secondary hover:bg-background-tertiary rounded-lg border border-border hover:border-primary/50 transition-all text-sm text-foreground-secondary hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {q}
                     </button>
@@ -235,10 +315,11 @@ export function ChatInterface() {
               </div>
 
               <button
-                onClick={createNewThread}
-                className="mt-8 px-6 py-3 bg-primary hover:bg-primary-600 text-white rounded-lg font-medium transition-all shadow-glow hover:shadow-glow-lg"
+                onClick={() => handleExampleQuestion(EXAMPLE_QUESTIONS[0])}
+                disabled={isLoading}
+                className="mt-8 px-6 py-3 bg-primary hover:bg-primary-600 text-white rounded-lg font-medium transition-all shadow-glow hover:shadow-glow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Start New Conversation
+                {isLoading ? 'Creating thread...' : 'Start New Conversation'}
               </button>
             </div>
           ) : activeThread.messages.length === 0 ? (
@@ -249,8 +330,9 @@ export function ChatInterface() {
                 {EXAMPLE_QUESTIONS.map((q, i) => (
                   <button
                     key={i}
-                    onClick={() => setInput(q)}
-                    className="w-full p-3 text-left bg-background-secondary hover:bg-background-tertiary rounded-lg border border-border hover:border-primary/50 transition-all text-sm text-foreground-secondary hover:text-foreground"
+                    onClick={() => handleExampleQuestion(q)}
+                    disabled={isLoading}
+                    className="w-full p-3 text-left bg-background-secondary hover:bg-background-tertiary rounded-lg border border-border hover:border-primary/50 transition-all text-sm text-foreground-secondary hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {q}
                   </button>
@@ -315,5 +397,6 @@ export function ChatInterface() {
         </div>
       </div>
     </div>
+    </>
   );
 }
