@@ -173,7 +173,30 @@ jobs:
           echo "=========================================="
       
       # ============================================
-      # Step 12: Failure notification (optional)
+      # Step 12: Commit ChromaDB data to repo (for Render free tier)
+      # ============================================
+      - name: Commit ChromaDB data
+        if: success()
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions Bot"
+          
+          # Add only the ChromaDB directory
+          git add data/chroma/
+          
+          # Check if there are changes to commit
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update ChromaDB data - Run ${{ steps.run_id.outputs.run_id }}"
+            git push origin main
+            echo "ChromaDB data committed to repository"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      # ============================================
+      # Step 13: Failure notification (optional)
       # ============================================
       - name: Notify on failure
         if: failure()
