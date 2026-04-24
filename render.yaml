@@ -1,0 +1,32 @@
+# Render Deployment Configuration
+# https://render.com/docs/infrastructure-as-code
+
+services:
+  - type: web
+    name: mf-faq-assistant
+    runtime: python
+    plan: free  # Change to 'starter' for production
+    region: singapore  # Closest to India
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m runtime.phase_9_api
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false  # Set manually in dashboard
+      - key: THREAD_DB_PATH
+        value: /opt/render/project/src/data/threads.db
+      - key: CHROMA_PERSIST_DIR
+        value: /opt/render/project/src/data/chroma
+      - key: ADMIN_REINDEX_SECRET
+        generateValue: true  # Auto-generate secure secret
+      - key: RUNTIME_API_DEBUG
+        value: "0"
+      - key: PORT
+        value: "8000"
+      - key: API_HOST
+        value: "0.0.0.0"
+    disk:
+      name: mf-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+    healthCheckPath: /health

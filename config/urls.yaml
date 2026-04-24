@@ -1,0 +1,44 @@
+# URL Registry for Mutual Fund FAQ Assistant
+# Phase 1: Curated corpus of 5 HDFC scheme pages from Groww
+# Note: No PDFs in current scope (HTML only)
+
+amc: hdfc_mutual_fund
+amc_name: "HDFC Mutual Fund"
+base_url: https://groww.in
+source_type: groww_scheme_page
+
+schemes:
+  - id: hdfc_mid_cap_direct_growth
+    name: "HDFC Mid Cap Fund Direct Growth"
+    url: https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth
+    category: mid_cap
+    
+  - id: hdfc_equity_direct_growth
+    name: "HDFC Equity Fund Direct Growth"
+    url: https://groww.in/mutual-funds/hdfc-equity-fund-direct-growth
+    category: equity
+    
+  - id: hdfc_focused_direct_growth
+    name: "HDFC Focused Fund Direct Growth"
+    url: https://groww.in/mutual-funds/hdfc-focused-fund-direct-growth
+    category: focused
+    
+  - id: hdfc_elss_tax_saver_direct_growth
+    name: "HDFC ELSS Tax Saver Fund Direct Plan Growth"
+    url: https://groww.in/mutual-funds/hdfc-elss-tax-saver-fund-direct-plan-growth
+    category: elss
+    
+  - id: hdfc_large_cap_direct_growth
+    name: "HDFC Large Cap Fund Direct Growth"
+    url: https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth
+    category: large_cap
+
+# Metadata
+version: "1.0.0"
+created_at: "2024-01-15"
+# Future expansion slots (PDFs, AMFI/SEBI pages)
+# documents:
+#   - type: kim
+#     url: ...
+#   - type: sid
+#     url: ...

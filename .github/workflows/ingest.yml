@@ -1,0 +1,182 @@
+# GitHub Actions Workflow for Mutual Fund FAQ Assistant
+# Phase 4.0: Scheduler - Runs daily at 09:15 AM IST
+# Full pipeline: Scrape → Normalize → Chunk/Embed → Index
+
+name: Daily Ingestion Pipeline
+
+on:
+  # Scheduled run: Every day at 09:15 AM IST
+  # Cron uses UTC; 03:45 UTC = 09:15 IST (India has no DST)
+  schedule:
+    - cron: '45 3 * * *'
+  
+  # Manual trigger for hotfixes
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Custom run ID (optional)'
+        required: false
+        default: ''
+
+env:
+  PYTHON_VERSION: '3.11'
+  INGEST_CHROMA_COLLECTION: mf_faq_chunks
+
+jobs:
+  ingest:
+    name: Ingestion Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      # ============================================
+      # Step 1: Checkout repository
+      # ============================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      # ============================================
+      # Step 2: Setup Python
+      # ============================================
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      # ============================================
+      # Step 3: Install dependencies
+      # ============================================
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      # ============================================
+      # Step 4: Generate run ID
+      # ============================================
+      - name: Generate run ID
+        id: run_id
+        run: |
+          if [ "${{ github.event.inputs.run_id }}" != "" ]; then
+            RUN_ID="${{ github.event.inputs.run_id }}"
+          else
+            RUN_ID=$(date +%Y%m%d-%H%M%S)
+          fi
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "Generated run ID: $RUN_ID"
+      
+      # ============================================
+      # Step 5: Phase 4.0 - Scrape URLs
+      # ============================================
+      - name: Phase 4.0 - Scrape URLs
+        id: scrape
+        run: |
+          echo "Starting scrape phase..."
+          python -m runtime.phase_4_scrape \
+            --run-id ${{ steps.run_id.outputs.run_id }} \
+            --config config/urls.yaml \
+            --output-dir data/raw
+        env:
+          INGEST_USER_AGENT: ${{ secrets.INGEST_USER_AGENT || 'MutualFundFAQ-Assistant/1.0 (github-actions)' }}
+          INGEST_TIMEOUT: '30'
+          INGEST_RATE_LIMIT: '2'
+      
+      # ============================================
+      # Step 6: Phase 4.1 - Normalize HTML
+      # ============================================
+      - name: Phase 4.1 - Normalize HTML
+        id: normalize
+        run: |
+          echo "Starting normalize phase..."
+          python -m runtime.phase_4_normalize \
+            --run-id ${{ steps.run_id.outputs.run_id }} \
+            --input-dir data/raw/${{ steps.run_id.outputs.run_id }} \
+            --output-dir data/structured
+      
+      # ============================================
+      # Step 7: Phase 4.2 - Chunk and Embed
+      # ============================================
+      - name: Phase 4.2 - Chunk and Embed
+        id: chunk_embed
+        run: |
+          echo "Starting chunk/embed phase..."
+          python -m runtime.phase_4_chunk_embed \
+            --run-id ${{ steps.run_id.outputs.run_id }} \
+            --input-dir data/structured/${{ steps.run_id.outputs.run_id }}/normalized \
+            --output-dir data/structured/${{ steps.run_id.outputs.run_id }}/chunked \
+            --model BAAI/bge-small-en-v1.5 \
+            --chunk-size 375 \
+            --overlap 0.12
+      
+      # ============================================
+      # Step 8: Phase 4.3 - Index to Local ChromaDB
+      # ============================================
+      - name: Phase 4.3 - Index to Local ChromaDB
+        id: index
+        run: |
+          echo "Starting index phase..."
+          python -m runtime.phase_4_index \
+            --run-id ${{ steps.run_id.outputs.run_id }} \
+            --input-dir data/structured \
+            --collection ${{ env.INGEST_CHROMA_COLLECTION }} \
+            --persist-dir data/chroma
+      
+      # ============================================
+      # Step 9: Verify Local Collection
+      # ============================================
+      - name: Verify Collection
+        if: success()
+        run: |
+          echo "Verifying local ChromaDB collection..."
+          python -c "import chromadb; client = chromadb.PersistentClient(path='data/chroma'); coll = client.get_collection('${{ env.INGEST_CHROMA_COLLECTION }}'); print(f'Collection verified: {coll.count()} documents')"
+          echo "Collection verification complete"
+      
+      # ============================================
+      # Step 10: Upload artifacts (logs only)
+      # ============================================
+      - name: Upload scrape logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scrape-logs-${{ steps.run_id.outputs.run_id }}
+          path: |
+            data/raw/${{ steps.run_id.outputs.run_id }}/manifest.json
+            data/structured/${{ steps.run_id.outputs.run_id }}/manifest.json
+            data/structured/${{ steps.run_id.outputs.run_id }}/chunked/manifest.json
+          retention-days: 7
+          if-no-files-found: ignore
+      
+      # ============================================
+      # Step 11: Summary
+      # ============================================
+      - name: Pipeline Summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Daily Ingestion Pipeline Summary"
+          echo "=========================================="
+          echo "Schedule: 09:15 AM IST (03:45 UTC)"
+          echo "Run ID: ${{ steps.run_id.outputs.run_id }}"
+          echo "Timestamp: $(date)"
+          echo ""
+          echo "Pipeline Steps:"
+          echo "  1. Scrape (4.0): ${{ steps.scrape.outcome }}"
+          echo "  2. Normalize (4.1): ${{ steps.normalize.outcome }}"
+          echo "  3. Chunk/Embed (4.2): ${{ steps.chunk_embed.outcome }}"
+          echo "  4. Index to Local ChromaDB (4.3): ${{ steps.index.outcome }}"
+          echo ""
+          echo "Data Destination: Local ChromaDB (data/chroma)"
+          echo "Collection: ${{ env.INGEST_CHROMA_COLLECTION }}"
+          echo "=========================================="
+      
+      # ============================================
+      # Step 12: Failure notification (optional)
+      # ============================================
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Ingestion pipeline failed for run ${{ steps.run_id.outputs.run_id }}"
+          echo "Check logs above for details"
